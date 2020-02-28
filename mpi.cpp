@@ -53,9 +53,10 @@ void rebin(particle_t* parts, int num_parts, int rank, int num_procs) {
             int new_procID = get_proc_id(new_binID);
             if (new_procID != rank) {
                 particles_to_send.push_back(*p);
-            } else if(new_binID != binID) {
                 bins[binID].erase(remove(bins[binID].begin(), bins[binID].end(), p), bins[binID].end());
+            } else if(new_binID != binID) {
                 bins[new_binID].push_back(p);
+                bins[binID].erase(remove(bins[binID].begin(), bins[binID].end(), p), bins[binID].end());
             }
         }
     }
@@ -97,10 +98,10 @@ void init_simulation(particle_t* parts, int num_parts, double size_, int rank, i
     bins = new bin_t[bin_row_count * bin_row_count];
     // get bins_per_proc
     int procs_used = num_procs;
-    int tmp = bin_count / procs_used;
+    int tmp = bin_count % procs_used;
     while(tmp) {
         procs_used -= 1;
-        tmp = bin_count/procs_used;
+        tmp = bin_count % procs_used;
     }
     bins_per_proc = bin_count / procs_used;
     // assign bins
@@ -150,9 +151,38 @@ void move(particle_t& p, double size) {
     }
 }
 
-void simulate_one_step(particle_t* parts, int num_parts, double size, int rank, int num_procs) {
-    // Write this function
+bool inline has_up(int bin_id) {
+    return bin_id - bin_row_count > -1;
+}
+bool inline has_down(int bin_id) {
+    return bin_id + bin_row_count < bin_count;
+}
+bool inline has_left(int bin_id) {
+    return bin_id % bin_row_count != 0;
+}
+bool inline has_right(int bin_id) {
+    return bin_id % bin_row_count != bin_row_count - 1;
+}
 
+void inline loop(particle_t& particle, int another_bin_id) {
+    for (particle_t* neighbor : bins[another_bin_id]) {
+        apply_force(particle, *neighbor); //TODO   should consider the particle itself or not???
+    }
+}
+
+void simulate_one_step(particle_t* parts, int num_parts, double size, int rank, int num_procs) {
+    // send
+
+    // recv
+    
+
+    // apply force
+
+
+    // move
+
+
+    // rebin
 }
 
 void gather_for_save(particle_t* parts, int num_parts, double size, int rank, int num_procs) {
@@ -167,3 +197,45 @@ void gather_for_save(particle_t* parts, int num_parts, double size, int rank, in
     free(disp_size);
 
 }
+
+
+
+
+    // for (int bin_id: local_binID) {
+    //     for (particle_t* p: bins[bin_id]) {
+    //         parts[i].ax = parts[i].ay = 0;
+    //         loop(*p, bin_id);
+    //         // up
+    //         if (has_up(bin_id)) {
+    //             loop(*p, bin_id - bin_row_count);
+    //         }
+    //         // up right
+    //         if (has_up(bin_id) && has_right(bin_id)) {
+    //             loop(*p, bin_id - bin_row_count + 1);
+    //         }
+    //         // right
+    //         if (has_right(bin_id)) {
+    //             loop(*p, bin_id + 1);
+    //         }
+    //         // down right
+    //         if (has_down(bin_id) && has_right(bin_id)) {
+    //             loop(*p, bin_id + bin_row_count + 1);
+    //         }
+    //         // down
+    //         if (has_down(bin_id)) {
+    //             loop(*p, bin_id + bin_row_count);
+    //         }
+    //         // down left
+    //         if (has_down(bin_id) && has_left(bin_id)) {
+    //             loop(*p, bin_id + bin_row_count - 1);
+    //         }
+    //         // left
+    //         if (has_left(bin_id)) {
+    //             loop(*p, bin_id - 1);
+    //         }
+    //         // up left
+    //         if (has_up(bin_id) && has_left(bin_id)) {
+    //             loop(*p, bin_id - bin_row_count - 1);
+    //         }
+    //     }
+    // }
