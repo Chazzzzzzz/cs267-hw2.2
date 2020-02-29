@@ -13,11 +13,13 @@ int bin_count;
 double bin_size;
 int bins_per_proc;
 bin_t* bins;
-vector<int> local_binID;
-vector<particle_t> particles_to_send;
+std::vector<int> local_binID;
+std::vector<particle_t> particles_to_send;
 particle_t* particles;
 int* migrate_size;
 int* disp_size;
+int proc_row_count;
+int proc_count;
 
 int inline get_bin_id(particle_t& particle) {
     int x, y;
@@ -41,7 +43,7 @@ void assign_bins(particle_t* parts, int num_parts, int rank) {
         int bin_id = get_bin_id(parts[i]);
         int proc_id = get_proc_id(bin_id);
         if (proc_id == rank) {
-            local_binID.push_back(bin_id)
+            bins[bin_id].push_back(&parts[i]);
         }
     }
 }
@@ -52,6 +54,7 @@ void rebin(particle_t* parts, int num_parts, int rank, int num_procs) {
             int new_binID = get_bin_id(*p);
             int new_procID = get_proc_id(new_binID);
             if (new_procID != rank) {
+                bins[binID].erase(remove(bins[binID].begin(), bins[binID].end(), p), bins[binID].end());
                 particles_to_send.push_back(*p);
             } else if(new_binID != binID) {
                 bins[binID].erase(remove(bins[binID].begin(), bins[binID].end(), p), bins[binID].end());
@@ -70,7 +73,7 @@ void rebin(particle_t* parts, int num_parts, int rank, int num_procs) {
         disp_size[i] = disp_size[i-1] + migrate_size[i-1];
     }
 
-    MPI_Allgatherv(&particles_to_send, particles_to_send.size(), PARTICLE, particles, migrate_size, disp_size, PARTICLE, MPI_COMM_WORLD);
+    MPI_Allgatherv(&particles_to_send[0], particles_to_send.size(), PARTICLE, particles, migrate_size, disp_size, PARTICLE, MPI_COMM_WORLD);
     
     int overall_migrate_num = 0;
     for (int i = 0; i < num_procs; i++) {
@@ -85,25 +88,45 @@ void rebin(particle_t* parts, int num_parts, int rank, int num_procs) {
         }
     }
 }
+int max_partitions(int process_count) {
+    int partitions = 1;
+    for (int i = 1; i <= std::fmin(process_count, sqrt(bin_count)); i++) {
+        if (bin_count % i == 0) {
+            if (bin_count / i <= process_count) {
+                return bin_count / i;
+            } else {
+                partitions = i;
+            }
+        }
+    }
+    return partitions;
+}
+
+void get_local_binID(int rank) {
+    for (int i = 0; i < bins_per_proc; i++) {
+        local_binID.push_back(rank * bins_per_proc + i);
+    }
+}
 
 void init_simulation(particle_t* parts, int num_parts, double size_, int rank, int num_procs) {
 	// You can use this space to initialize data objects that you may need
 	// This function will be called once before the algorithm begins
 	// Do not do any particle simulation here
     size = size_;
-    bin_row_count = ceil(size / cutoff);
+    bin_row_count = size / cutoff;
     bin_count = bin_row_count * bin_row_count;
     bin_size = size / bin_row_count;
     bins = new bin_t[bin_row_count * bin_row_count];
     // get bins_per_proc
-    int procs_used = num_procs;
-    int tmp = bin_count / procs_used;
-    while(tmp) {
-        procs_used -= 1;
-        tmp = bin_count/procs_used;
+    proc_count = max_partitions(num_procs);
+    bins_per_proc = bin_count / proc_count;
+    if (bin_row_count > bins_per_proc) {
+        proc_row_count = bin_row_count / bins_per_proc;
+    } else {
+        proc_row_count = 1;
     }
-    bins_per_proc = bin_count / procs_used;
     // assign bins
+    get_local_binID(rank);
     assign_bins(parts, num_parts, rank);
     // init particles
     particles = (particle_t*) malloc(num_parts * sizeof(particle_t));
@@ -150,9 +173,183 @@ void move(particle_t& p, double size) {
     }
 }
 
-void simulate_one_step(particle_t* parts, int num_parts, double size, int rank, int num_procs) {
-    // Write this function
 
+bool inline has_up_bin(int bin_id) {
+    return bin_id - bin_row_count > -1;
+}
+bool inline has_down_bin(int bin_id) {
+    return bin_id + bin_row_count < bin_count;
+}
+bool inline has_left_bin(int bin_id) {
+    return bin_id % bin_row_count != 0;
+}
+bool inline has_right_bin(int bin_id) {
+    return bin_id % bin_row_count != bin_row_count - 1;
+}
+
+bool inline has_up_proc(int proc_id) {
+    return proc_id - proc_row_count > -1;
+}
+int inline get_up_proc(int proc_id) {
+    return proc_id - proc_row_count;
+}
+bool inline has_down_proc(int proc_id) {
+    return proc_id + proc_row_count < proc_count;
+}
+int inline get_down_proc(int proc_id) {
+    return proc_id + proc_row_count;
+}
+bool inline has_left_proc(int proc_id) {
+    return proc_id % proc_row_count != 0;
+}
+int inline get_left_proc(int proc_id) {
+    return proc_id - 1;
+}
+bool inline has_right_proc(int proc_id) {
+    return proc_id % proc_row_count != proc_row_count - 1;
+}
+int inline get_right_proc(int proc_id) {
+    return proc_id + 1;
+}
+
+std::vector<int> get_up_border_bin_ids(int proc_id) {
+    std::vector<int> res;
+    if (bin_row_count > bins_per_proc) {
+        for (int i = 0; i < bins_per_proc; i++) {
+            res.push_back(proc_id * bins_per_proc + i);
+        }
+    } else {
+        for (int i = 0; i < bin_row_count; i++) {
+            res.push_back(proc_id * bins_per_proc + i);
+        }
+    }
+    return res;
+}
+std::vector<int> get_down_border_bin_ids(int proc_id) {
+    std::vector<int> res;
+    if (bin_row_count > bins_per_proc) {
+        for (int i = 0; i < bins_per_proc; i++) {
+            res.push_back(proc_id * bins_per_proc + i);
+        }
+    } else {
+        for (int i = 0; i < bin_row_count; i++) {
+            res.push_back((proc_id + 1) * bins_per_proc - i - 1);
+        }
+    }
+    return res;
+}
+int get_left_border_bin_id(int proc_id) {
+    if (bin_row_count > bins_per_proc) {
+        return proc_id * bins_per_proc;
+    } else {
+        return -1;
+    }
+}
+int get_right_border_bin_id(int proc_id) {
+    if (bin_row_count > bins_per_proc) {
+        return (proc_id + 1) * bins_per_proc - 1;
+    } else {
+        return -1;
+    }
+}
+
+void simulate_one_step(particle_t* parts, int num_parts, double size, int rank, int num_procs) {
+    std::vector<MPI_Request> requests;
+    if (has_up_proc(rank)) {
+        std::vector<int> up_border = get_up_border_bin_ids(rank);
+        std::vector<particle_t> to_send;
+        for (auto bin_id : up_border) {
+            for (auto part : bins[bin_id]) {
+                to_send.push_back(*part);
+            }
+        }
+        MPI_Request req;
+        requests.push_back(req);
+        MPI_Isend(&to_send[0], to_send.size(), PARTICLE, get_up_proc(rank), 0, MPI_COMM_WORLD, &req);
+    }
+    if (has_left_proc(rank)) {
+        int left_border = get_left_border_bin_id(rank);
+        std::vector<particle_t> to_send;
+        for (auto part : bins[left_border]) {
+            to_send.push_back(*part);
+        }
+        MPI_Request req;
+        requests.push_back(req);
+        MPI_Isend(&to_send[0], to_send.size(), PARTICLE, get_left_proc(rank), 0, MPI_COMM_WORLD, &req);
+    }
+    if (has_down_proc(rank)) {
+        std::vector<int> down_border = get_down_border_bin_ids(rank);
+        std::vector<particle_t> to_send;
+        for (auto bin_id : down_border) {
+            for (auto part : bins[bin_id]) {
+                to_send.push_back(*part);
+            }
+        }
+        MPI_Request req;
+        requests.push_back(req);
+        MPI_Isend(&to_send[0], to_send.size(), PARTICLE, get_down_proc(rank), 0, MPI_COMM_WORLD, &req);
+    }
+    if (has_right_proc(rank)) {
+        int right_border = get_right_border_bin_id(rank);
+        std::vector<particle_t> to_send;
+        for (auto part : bins[right_border]) {
+            to_send.push_back(*part);
+        }
+        MPI_Request req;
+        requests.push_back(req);
+        MPI_Isend(&to_send[0], to_send.size(), PARTICLE, get_right_proc(rank), 0, MPI_COMM_WORLD, &req);
+    }
+    if (has_up_proc(rank) && has_left_proc(rank)) {
+        int left_border = get_left_border_bin_id(rank);
+        std::vector<particle_t> to_send;
+        for (auto part : bins[left_border]) {
+            to_send.push_back(*part);
+        }
+        MPI_Request req;
+        requests.push_back(req);
+        MPI_Isend(&to_send[0], to_send.size(), PARTICLE, get_up_proc(rank) - 1, 0, MPI_COMM_WORLD, &req);
+    }
+    if (has_up_proc(rank) && has_right_proc(rank)) {
+        int right_border = get_right_border_bin_id(rank);
+        std::vector<particle_t> to_send;
+        for (auto part : bins[right_border]) {
+            to_send.push_back(*part);
+        }
+        MPI_Request req;
+        requests.push_back(req);
+        MPI_Isend(&to_send[0], to_send.size(), PARTICLE, get_up_proc(rank) + 1, 0, MPI_COMM_WORLD, &req);
+    }
+    if (has_down_proc(rank) && has_left_proc(rank)) {
+        int left_border = get_left_border_bin_id(rank);
+        std::vector<particle_t> to_send;
+        for (auto part : bins[left_border]) {
+            to_send.push_back(*part);
+        }
+        MPI_Request req;
+        requests.push_back(req);
+        MPI_Isend(&to_send[0], to_send.size(), PARTICLE, get_down_proc(rank) - 1, 0, MPI_COMM_WORLD, &req);
+    }
+    if (has_down_proc(rank) && has_right_proc(rank)) {
+        int right_border = get_right_border_bin_id(rank);
+        std::vector<particle_t> to_send;
+        for (auto part : bins[right_border]) {
+            to_send.push_back(*part);
+        }
+        MPI_Request req;
+        requests.push_back(req);
+        MPI_Isend(&to_send[0], to_send.size(), PARTICLE, get_down_proc(rank) + 1, 0, MPI_COMM_WORLD, &req);
+    }
+    /*
+    for (auto req : requests) {
+        MPI_Status status;
+        MPI_Wait(&req, &status);
+    }
+    */
+    if (has_up_proc(rank)) {
+        MPI_Status status;
+        particle_t recv_buff[10];
+        MPI_Recv(&recv_buff, num_parts, PARTICLE, get_up_proc(rank), 0, MPI_COMM_WORLD, &status);
+    }
 }
 
 void gather_for_save(particle_t* parts, int num_parts, double size, int rank, int num_procs) {
@@ -160,10 +357,5 @@ void gather_for_save(particle_t* parts, int num_parts, double size, int rank, in
     // processor has an in-order view of all particles. That is, the array
     // parts is complete and sorted by particle id.
 
-
-
-    free(particles);
-    free(migrate_size);
-    free(disp_size);
 
 }
