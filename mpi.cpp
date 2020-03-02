@@ -214,28 +214,28 @@ int inline get_right_proc(int proc_id) {
     return proc_id + 1;
 }
 
-vector<int> get_up_border_bin_ids(int proc_id) {
-    vector<int> res;
+vector<int>* get_up_border_bin_ids(int proc_id) {
+    vector<int>* res = new vector<int>;
     if (bin_row_count > bins_per_proc) {
         for (int i = 0; i < bins_per_proc; i++) {
-            res.push_back(proc_id * bins_per_proc + i);
+            res->push_back(proc_id * bins_per_proc + i);
         }
     } else {
         for (int i = 0; i < bin_row_count; i++) {
-            res.push_back(proc_id * bins_per_proc + i);
+            res->push_back(proc_id * bins_per_proc + i);
         }
     }
     return res;
 }
-vector<int> get_down_border_bin_ids(int proc_id) {
-    vector<int> res;
+vector<int>* get_down_border_bin_ids(int proc_id) {
+    vector<int>* res = new vector<int>();
     if (bin_row_count > bins_per_proc) {
         for (int i = 0; i < bins_per_proc; i++) {
-            res.push_back(proc_id * bins_per_proc + i);
+            res->push_back(proc_id * bins_per_proc + i);
         }
     } else {
         for (int i = 0; i < bin_row_count; i++) {
-            res.push_back((proc_id + 1) * bins_per_proc - i - 1);
+            res->push_back((proc_id + 1) * bins_per_proc - i - 1);
         }
     }
     return res;
@@ -269,15 +269,16 @@ vector<particle_t>* send_particles(int rank, int direction, vector<MPI_Request>*
     if (direction == 0 || direction == 4) {
         vector<int>* border;
         if (direction == 0) {
-            *border = get_up_border_bin_ids(rank);
+            border = get_up_border_bin_ids(rank);
         } else {
-            *border = get_down_border_bin_ids(rank);
+            border = get_down_border_bin_ids(rank);
         }
         for (auto bin_id : *border) {
             for (auto part : bins[bin_id]) {
                 to_send->push_back(*part);
             }
         }
+        delete border;
     } else {
         int border;
         switch (direction) {
