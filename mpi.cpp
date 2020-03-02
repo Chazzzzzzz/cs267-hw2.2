@@ -375,6 +375,12 @@ particle_t* receive_paritcles(int num_parts, int rank, int direction, set<int>* 
     return recv_buff;
 }
 
+void inline loop(particle_t* part, int another_bin_id) {
+    for (particle_t* neighbor : bins[another_bin_id]) {
+        apply_force(*part, *neighbor);
+    }
+}
+
 void simulate_one_step(particle_t* parts, int num_parts, double size, int rank, int num_procs) {
     vector<MPI_Request> requests;
     vector<vector<particle_t>*> send_buffers;
@@ -437,7 +443,38 @@ void simulate_one_step(particle_t* parts, int num_parts, double size, int rank, 
     // calculate force here
     for (auto bin_id : local_binID) {
         for (auto part : bins[bin_id]) {
+            part->ax = part->ay = 0;
+            loop(part, bin_id);
+            if (has_up_bin(bin_id)) {
+                loop(part, bin_id - bin_row_count);
+            }
+            if (has_up_bin(bin_id) && has_right_bin(bin_id)) {
+                loop(part, bin_id - bin_row_count + 1);
+            }
+            if (has_right_bin(bin_id)) {
+                loop(part, bin_id + 1);
+            }
+            if (has_down_bin(bin_id) && has_right_bin(bin_id)) {
+                loop(part, bin_id + bin_row_count + 1);
+            }
+            if (has_down_bin(bin_id)) {
+                loop(part, bin_id + bin_row_count);
+            }
+            if (has_down_bin(bin_id) && has_left_bin(bin_id)) {
+                loop(part, bin_id + bin_row_count - 1);
+            }
+            if (has_left_bin(bin_id)) {
+                loop(part, bin_id - 1);
+            }
+            if (has_up_bin(bin_id) && has_left_bin(bin_id)) {
+                loop(part, bin_id - bin_row_count - 1);
+            }
+        }
+    }
 
+    for (auto bin_id : local_binID) {
+        for (auto part : bins[bin_id]) {
+            move(*part, size);
         }
     }
     
@@ -449,6 +486,7 @@ void simulate_one_step(particle_t* parts, int num_parts, double size, int rank, 
     for (int i = 0; i < recv_buffers.size(); i++) {
         delete[] recv_buffers[i];
     }
+    rebin(parts, num_parts, rank, num_procs);
 }
 
 void gather_for_save(particle_t* parts, int num_parts, double size, int rank, int num_procs) {
