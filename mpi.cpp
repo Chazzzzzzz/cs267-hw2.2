@@ -23,6 +23,9 @@ int* disp_size;
 int proc_row_count;
 int proc_count;
 
+int* gather_particles_size;
+int* gather_disp_size;
+
 
 int inline get_bin_id(particle_t& particle) {
     int x, y;
@@ -524,6 +527,36 @@ void gather_for_save(particle_t* parts, int num_parts, double size, int rank, in
     // Write this function such that at the end of it, the master (rank == 0)
     // processor has an in-order view of all particles. That is, the array
     // parts is complete and sorted by particle id.
+    vector<particle_t> local_particles;
+    for (int binID: local_binID) {
+        for (particle_t* p: bins[binID]) {
+            local_particles.push_back(*p);
+        }
+    }
 
+    int local_particles_size = local_particles.size();
+    MPI_Gather(&local_particles_size, 1, MPI_INT, gather_particles_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
+    gather_disp_size[0] = 0;
+    for (int i = 1; i < num_procs; i++) {
+        gather_disp_size[i] = gather_disp_size[i-1] + gather_particles_size[i-1];
+    }
+
+    particle_t recv_buf[num_parts];
+    MPI_Gatherv(&local_particles, local_particles.size(), PARTICLE, recv_buf,
+            gather_particles_size, gather_disp_size, PARTICLE, 0, MPI_COMM_WORLD);
+
+    for (int i = 0; i < num_parts; i++) {
+        particle_t p = recv_buf[i];
+        if(p.id) {
+            parts[p.id-1].x = p.x;
+            parts[p.id-1].y = p.y;
+            parts[p.id-1].ax = p.ax;
+            parts[p.id-1].ay = p.ay;
+            parts[p.id-1].vx = p.vx;
+            parts[p.id-1].vy = p.vy;
+        } else {
+            cout << "error: gather_for_save cannot gather all the particles"<< endl;
+        }
+    }
 }
