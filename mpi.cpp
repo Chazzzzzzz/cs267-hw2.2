@@ -1,6 +1,7 @@
 #include "common.h"
 #include <mpi.h>
 #include <cmath>
+#include <unistd.h>
 #include <algorithm>
 #include <vector>
 #include <set>
@@ -264,7 +265,7 @@ int get_right_border_bin_id(int proc_id) {
 5  4  3
 
 */
-vector<particle_t>* send_particles(int rank, int direction, vector<MPI_Request>* requests) {
+vector<particle_t>* send_particles(int rank, int direction, vector<MPI_Request*>* requests) {
     vector<particle_t>* to_send = new vector<particle_t>();
     if (direction == 0 || direction == 4) {
         vector<int>* border;
@@ -293,32 +294,32 @@ vector<particle_t>* send_particles(int rank, int direction, vector<MPI_Request>*
             to_send->push_back(*part);
         }
     }
-    MPI_Request request;
+    MPI_Request* request = new MPI_Request();
     requests->push_back(request);
     switch (direction) {
         case 0:
-            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, get_up_proc(rank), 0, MPI_COMM_WORLD, &request);
+            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, get_up_proc(rank), 0, MPI_COMM_WORLD, request);
             break;
         case 1:
-            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, get_up_proc(rank) + 1, 0, MPI_COMM_WORLD, &request);
+            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, get_up_proc(rank) + 1, 0, MPI_COMM_WORLD, request);
             break;
         case 2:
-            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, rank + 1, 0, MPI_COMM_WORLD, &request);
+            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, rank + 1, 0, MPI_COMM_WORLD, request);
             break;
         case 3:
-            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, get_down_proc(rank) + 1, 0, MPI_COMM_WORLD, &request);
+            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, get_down_proc(rank) + 1, 0, MPI_COMM_WORLD, request);
             break;
         case 4:
-            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, get_down_proc(rank), 0, MPI_COMM_WORLD, &request);
+            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, get_down_proc(rank), 0, MPI_COMM_WORLD, request);
             break;
         case 5:
-            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, get_down_proc(rank) - 1, 0, MPI_COMM_WORLD, &request);
+            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, get_down_proc(rank) - 1, 0, MPI_COMM_WORLD, request);
             break;
         case 6:
-            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, rank - 1, 0, MPI_COMM_WORLD, &request);
+            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, rank - 1, 0, MPI_COMM_WORLD, request);
             break;
         case 7:
-            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, get_up_proc(rank) - 1, 0, MPI_COMM_WORLD, &request);
+            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, get_up_proc(rank) - 1, 0, MPI_COMM_WORLD, request);
             break;
     }
     return to_send;
@@ -342,32 +343,33 @@ particle_t* receive_paritcles(int num_parts, int rank, int direction, set<int>* 
     }
     switch (direction) {
         case 0:
-            MPI_Recv(&recv_buff, num_parts, PARTICLE, get_up_proc(rank), 0, MPI_COMM_WORLD, &status);
+            MPI_Recv(recv_buff, num_parts, PARTICLE, get_up_proc(rank), 0, MPI_COMM_WORLD, &status);
             break;
         case 1:
-            MPI_Recv(&recv_buff, num_parts, PARTICLE, get_up_proc(rank) + 1, 0, MPI_COMM_WORLD, &status);
+            MPI_Recv(recv_buff, num_parts, PARTICLE, get_up_proc(rank) + 1, 0, MPI_COMM_WORLD, &status);
             break;
         case 2:
-            MPI_Recv(&recv_buff, num_parts, PARTICLE, rank + 1, 0, MPI_COMM_WORLD, &status);
+            MPI_Recv(recv_buff, num_parts, PARTICLE, rank + 1, 0, MPI_COMM_WORLD, &status);
             break;
         case 3:
-            MPI_Recv(&recv_buff, num_parts, PARTICLE, get_down_proc(rank) + 1, 0, MPI_COMM_WORLD, &status);
+            MPI_Recv(recv_buff, num_parts, PARTICLE, get_down_proc(rank) + 1, 0, MPI_COMM_WORLD, &status);
             break;
         case 4:
-            MPI_Recv(&recv_buff, num_parts, PARTICLE, get_down_proc(rank), 0, MPI_COMM_WORLD, &status);
+            MPI_Recv(recv_buff, num_parts, PARTICLE, get_down_proc(rank), 0, MPI_COMM_WORLD, &status);
             break;
         case 5:
-            MPI_Recv(&recv_buff, num_parts, PARTICLE, get_down_proc(rank) - 1, 0, MPI_COMM_WORLD, &status);
+            MPI_Recv(recv_buff, num_parts, PARTICLE, get_down_proc(rank) - 1, 0, MPI_COMM_WORLD, &status);
             break;
         case 6:
-            MPI_Recv(&recv_buff, num_parts, PARTICLE, rank - 1, 0, MPI_COMM_WORLD, &status);
+            MPI_Recv(recv_buff, num_parts, PARTICLE, rank - 1, 0, MPI_COMM_WORLD, &status);
             break;
         case 7:
-            MPI_Recv(&recv_buff, num_parts, PARTICLE, get_up_proc(rank) - 1, 0, MPI_COMM_WORLD, &status);
+            MPI_Recv(recv_buff, num_parts, PARTICLE, get_up_proc(rank) - 1, 0, MPI_COMM_WORLD, &status);
             break;
     }
+
     int count;
-    MPI_Get_count(&status, MPI_INT, &count);
+    MPI_Get_count(&status, PARTICLE, &count);
     for (int i = 0; i < count; i++) {
         int bin_id = get_bin_id(recv_buff[i]);
         bins[bin_id].push_back(&recv_buff[i]);
@@ -383,7 +385,7 @@ void inline loop(particle_t* part, int another_bin_id) {
 }
 
 void simulate_one_step(particle_t* parts, int num_parts, double size, int rank, int num_procs) {
-    vector<MPI_Request> requests;
+    vector<MPI_Request*> requests;
     vector<vector<particle_t>*> send_buffers;
     if (has_up_proc(rank)) {
         send_buffers.push_back(send_particles(rank, 0, &requests));
@@ -410,10 +412,14 @@ void simulate_one_step(particle_t* parts, int num_parts, double size, int rank, 
         send_buffers.push_back(send_particles(rank, 3, &requests));
     }
     MPI_Status array_of_statuses[requests.size()];
-    MPI_Waitall(requests.size(), requests.data(), array_of_statuses);
+    for (auto request : requests) {
+        MPI_Status status;
+        MPI_Wait(request, &status);
+    }
     for (int i = 0; i < send_buffers.size(); i++) {
         delete send_buffers[i];
     }
+    MPI_Barrier(MPI_COMM_WORLD);
     vector<particle_t*> recv_buffers;
     set<int> surrounding_bin_ids;
     if (has_up_proc(rank)) {
