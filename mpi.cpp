@@ -92,20 +92,14 @@ void rebin(particle_t* parts, int num_parts, int rank, int num_procs) {
             bins[bin_id].push_back(&particles[i]);
         }
     }
-    delete particles;
+    delete[] particles;
 }
 int max_partitions(int process_count) {
-    int partitions = 1;
-    for (int i = 1; i <= fmin(process_count, sqrt(bin_count)); i++) {
+    for (int i = fmin(process_count, bin_count); i >= 1; i--) {
         if (bin_count % i == 0) {
-            if (bin_count / i <= process_count) {
-                return bin_count / i;
-            } else {
-                partitions = i;
-            }
+            return i;
         }
     }
-    return partitions;
 }
 
 void get_local_binID(int rank) {
@@ -387,6 +381,9 @@ void inline loop(particle_t* part, int another_bin_id) {
 }
 
 void simulate_one_step(particle_t* parts, int num_parts, double size, int rank, int num_procs) {
+//    int slp = 0;
+//    while(slp == 0)
+//        sleep(5);
     vector<MPI_Request*> requests;
     vector<vector<particle_t>*> send_buffers;
     if (has_up_proc(rank)) {
