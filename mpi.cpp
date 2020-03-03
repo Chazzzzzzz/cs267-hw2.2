@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <vector>
 #include <set>
+#include <iostream>
 
 using namespace std;
 // Put any static global variables here that you will use throughout the simulation.
@@ -122,12 +123,14 @@ void init_simulation(particle_t* parts, int num_parts, double size_, int rank, i
     size = size_;
     bin_row_count = size / cutoff;
     bin_count = bin_row_count * bin_row_count;
-    bin_size = size / bin_row_count;
-    bins = new bin_t[bin_row_count * bin_row_count];
+    while ((bin_count > 10) & (bin_count % 10 != 0)) {
+        bin_count++;
+    }
+    cout << bin_count;
+    bin_size = cutoff;
+    bins = new bin_t[bin_count];
     // get bins_per_proc
     proc_count = max_partitions(num_procs);
-    cout << "max proc " << proc_count << endl;
-    cout << "bin count" << bin_count << endl;
     bins_per_proc = bin_count / proc_count;
     if (bin_row_count > bins_per_proc) {
         proc_row_count = bin_row_count / bins_per_proc;
