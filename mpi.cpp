@@ -91,6 +91,12 @@ void rebin(particle_t* original_parts, int num_parts, int rank, int num_procs) {
         if (proc_id == rank) {
             particle_t particle_copy = particles[i];
             bins[bin_id].push_back(&original_parts[particle_copy.id - 1]);
+            original_parts[particle_copy.id - 1].x = particle_copy.x;
+            original_parts[particle_copy.id - 1].y = particle_copy.y;
+            original_parts[particle_copy.id - 1].vx = particle_copy.vx;
+            original_parts[particle_copy.id - 1].vy = particle_copy.vy;
+            original_parts[particle_copy.id - 1].ax = particle_copy.ax;
+            original_parts[particle_copy.id - 1].ay = particle_copy.ay;
         }
     }
     delete[] particles;
@@ -120,6 +126,8 @@ void init_simulation(particle_t* parts, int num_parts, double size_, int rank, i
     bins = new bin_t[bin_row_count * bin_row_count];
     // get bins_per_proc
     proc_count = max_partitions(num_procs);
+    cout << "max proc " << proc_count << endl;
+    cout << "bin count" << bin_count << endl;
     bins_per_proc = bin_count / proc_count;
     if (bin_row_count > bins_per_proc) {
         proc_row_count = bin_row_count / bins_per_proc;
