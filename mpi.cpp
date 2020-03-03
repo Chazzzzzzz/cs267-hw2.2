@@ -17,12 +17,11 @@ double bin_size;
 int bins_per_proc;
 bin_t* bins;
 vector<int> local_binID;
-vector<particle_t> particles_to_send;
-particle_t* particles;
 int* migrate_size;
 int* disp_size;
 int proc_row_count;
 int proc_count;
+
 
 int inline get_bin_id(particle_t& particle) {
     int x, y;
@@ -52,6 +51,7 @@ void assign_bins(particle_t* parts, int num_parts, int rank) {
 }
 
 void rebin(particle_t* parts, int num_parts, int rank, int num_procs) {
+    vector<particle_t> particles_to_send;
     for (int binID: local_binID) {
         for (particle_t* p: bins[binID]) {
             int new_binID = get_bin_id(*p);
@@ -76,6 +76,8 @@ void rebin(particle_t* parts, int num_parts, int rank, int num_procs) {
         disp_size[i] = disp_size[i-1] + migrate_size[i-1];
     }
 
+    //particle_t* particles = (particle_t*) malloc(num_parts * sizeof(particle_t));
+    particle_t* particles = new particle_t[num_parts];
     MPI_Allgatherv(&particles_to_send[0], particles_to_send.size(), PARTICLE, particles, migrate_size, disp_size, PARTICLE, MPI_COMM_WORLD);
     
     int overall_migrate_num = 0;
@@ -90,6 +92,7 @@ void rebin(particle_t* parts, int num_parts, int rank, int num_procs) {
             bins[bin_id].push_back(&particles[i]);
         }
     }
+    delete particles;
 }
 int max_partitions(int process_count) {
     int partitions = 1;
@@ -132,7 +135,6 @@ void init_simulation(particle_t* parts, int num_parts, double size_, int rank, i
     get_local_binID(rank);
     assign_bins(parts, num_parts, rank);
     // init particles
-    particles = (particle_t*) malloc(num_parts * sizeof(particle_t));
     migrate_size = (int*) malloc(num_procs * sizeof(int));
     disp_size = (int*) malloc(num_procs * sizeof(int));
 }
@@ -415,11 +417,12 @@ void simulate_one_step(particle_t* parts, int num_parts, double size, int rank, 
     for (auto request : requests) {
         MPI_Status status;
         MPI_Wait(request, &status);
+        delete request;
     }
     for (int i = 0; i < send_buffers.size(); i++) {
         delete send_buffers[i];
     }
-    MPI_Barrier(MPI_COMM_WORLD);
+    //MPI_Barrier(MPI_COMM_WORLD);
     vector<particle_t*> recv_buffers;
     set<int> surrounding_bin_ids;
     if (has_up_proc(rank)) {
@@ -493,6 +496,7 @@ void simulate_one_step(particle_t* parts, int num_parts, double size, int rank, 
     for (int i = 0; i < recv_buffers.size(); i++) {
         delete[] recv_buffers[i];
     }
+    MPI_Barrier(MPI_COMM_WORLD);
     rebin(parts, num_parts, rank, num_procs);
 }
 
