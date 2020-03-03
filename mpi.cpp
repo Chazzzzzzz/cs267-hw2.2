@@ -69,7 +69,7 @@ void rebin(particle_t* parts, int num_parts, int rank, int num_procs) {
     MPI_Barrier(MPI_COMM_WORLD);
 
     int particles_to_send_size = particles_to_send.size();
-    MPI_Allgather(&particles_to_send_size, 1, MPI::INT, migrate_size, 1, MPI::INT, MPI_COMM_WORLD);
+    MPI_Allgather(&particles_to_send_size, 1, MPI_INT, migrate_size, 1, MPI_INT, MPI_COMM_WORLD);
 
     disp_size[0] = 0;
     for (int i = 1; i < num_procs; i++) {
