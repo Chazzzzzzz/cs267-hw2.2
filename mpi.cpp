@@ -50,7 +50,7 @@ void assign_bins(particle_t* parts, int num_parts, int rank) {
     }
 }
 
-void rebin(particle_t* parts, int num_parts, int rank, int num_procs) {
+void rebin(particle_t* original_parts, int num_parts, int rank, int num_procs) {
     vector<particle_t> particles_to_send;
     for (int binID: local_binID) {
         for (particle_t* p: bins[binID]) {
@@ -89,7 +89,8 @@ void rebin(particle_t* parts, int num_parts, int rank, int num_procs) {
         int bin_id = get_bin_id(particles[i]);
         int proc_id = get_proc_id(bin_id);
         if (proc_id == rank) {
-            bins[bin_id].push_back(&particles[i]);
+            particle_t particle_copy = particles[i];
+            bins[bin_id].push_back(&original_parts[particle_copy.id - 1]);
         }
     }
     delete[] particles;
@@ -126,8 +127,10 @@ void init_simulation(particle_t* parts, int num_parts, double size_, int rank, i
         proc_row_count = 1;
     }
     // assign bins
-    get_local_binID(rank);
-    assign_bins(parts, num_parts, rank);
+    if (rank < proc_count) {
+        get_local_binID(rank);
+        assign_bins(parts, num_parts, rank);
+    }
     // init particles
     migrate_size = (int*) malloc(num_procs * sizeof(int));
     disp_size = (int*) malloc(num_procs * sizeof(int));
@@ -187,24 +190,36 @@ bool inline has_right_bin(int bin_id) {
 }
 
 bool inline has_up_proc(int proc_id) {
+    if (proc_id >= proc_count) {
+        return false;
+    }
     return proc_id - proc_row_count > -1;
 }
 int inline get_up_proc(int proc_id) {
     return proc_id - proc_row_count;
 }
 bool inline has_down_proc(int proc_id) {
+    if (proc_id >= proc_count) {
+        return false;
+    }
     return proc_id + proc_row_count < proc_count;
 }
 int inline get_down_proc(int proc_id) {
     return proc_id + proc_row_count;
 }
 bool inline has_left_proc(int proc_id) {
+    if (proc_id >= proc_count) {
+        return false;
+    }
     return proc_id % proc_row_count != 0;
 }
 int inline get_left_proc(int proc_id) {
     return proc_id - 1;
 }
 bool inline has_right_proc(int proc_id) {
+    if (proc_id >= proc_count) {
+        return false;
+    }
     return proc_id % proc_row_count != proc_row_count - 1;
 }
 int inline get_right_proc(int proc_id) {
@@ -381,9 +396,6 @@ void inline loop(particle_t* part, int another_bin_id) {
 }
 
 void simulate_one_step(particle_t* parts, int num_parts, double size, int rank, int num_procs) {
-//    int slp = 0;
-//    while(slp == 0)
-//        sleep(5);
     vector<MPI_Request*> requests;
     vector<vector<particle_t>*> send_buffers;
     if (has_up_proc(rank)) {
