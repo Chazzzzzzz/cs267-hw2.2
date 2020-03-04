@@ -129,7 +129,6 @@ void init_simulation(particle_t* parts, int num_parts, double size_, int rank, i
     while ((bin_count > 10) & (bin_count % 10 != 0)) {
         bin_count++;
     }
-    cout << bin_count;
     bin_size = cutoff;
     bins = new bin_t[bin_count];
     // get bins_per_proc
@@ -533,9 +532,16 @@ void gather_for_save(particle_t* parts, int num_parts, double size, int rank, in
             local_particles.push_back(*p);
         }
     }
+    gather_particles_size = new int[num_procs];
+    gather_disp_size = new int[num_procs];
 
+    int error_code = 0;
+    
     int local_particles_size = local_particles.size();
-    MPI_Gather(&local_particles_size, 1, MPI_INT, gather_particles_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    error_code = MPI_Gather(&local_particles_size, 1, MPI_INT, gather_particles_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    if (error_code != 0) {
+        cout << "MPI_Gather error!!" << endl;
+    }
 
     gather_disp_size[0] = 0;
     for (int i = 1; i < num_procs; i++) {
@@ -543,20 +549,22 @@ void gather_for_save(particle_t* parts, int num_parts, double size, int rank, in
     }
 
     particle_t recv_buf[num_parts];
-    MPI_Gatherv(&local_particles, local_particles.size(), PARTICLE, recv_buf,
+    error_code = MPI_Gatherv(&local_particles[0], local_particles.size(), PARTICLE, recv_buf,
             gather_particles_size, gather_disp_size, PARTICLE, 0, MPI_COMM_WORLD);
 
-    for (int i = 0; i < num_parts; i++) {
-        particle_t p = recv_buf[i];
-        if(p.id) {
+    if (error_code != 0) {
+        cout << "MPI_Gatherv error!!" << endl;
+    }
+
+    if (rank == 0) {
+        for (int i = 0; i < num_parts; i++) {
+            particle_t p = recv_buf[i];
             parts[p.id-1].x = p.x;
             parts[p.id-1].y = p.y;
             parts[p.id-1].ax = p.ax;
             parts[p.id-1].ay = p.ay;
             parts[p.id-1].vx = p.vx;
             parts[p.id-1].vy = p.vy;
-        } else {
-            cout << "error: gather_for_save cannot gather all the particles"<< endl;
         }
     }
 }
