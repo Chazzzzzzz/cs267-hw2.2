@@ -14,7 +14,6 @@ typedef vector<particle_t*> bin_t;
 double size;
 int bin_row_count;
 int bin_count;
-int original_bin_count;
 double bin_size;
 int bins_per_proc;
 bin_t* bins;
@@ -127,12 +126,8 @@ void init_simulation(particle_t* parts, int num_parts, double size_, int rank, i
     size = size_;
     bin_row_count = size / cutoff;
     bin_count = bin_row_count * bin_row_count;
-    original_bin_count = bin_count;
-    while ((bin_count > 10) & (bin_count % 10 != 0)) {
-        bin_count++;
-    }
-    bin_size = cutoff;
-    bins = new bin_t[bin_count];
+    bin_size = size / bin_row_count;
+    bins = new bin_t[bin_row_count * bin_row_count];
     // get bins_per_proc
     proc_count = max_partitions(num_procs);
     bins_per_proc = bin_count / proc_count;
@@ -195,7 +190,7 @@ bool inline has_up_bin(int bin_id) {
     return bin_id - bin_row_count > -1;
 }
 bool inline has_down_bin(int bin_id) {
-    return bin_id + bin_row_count < original_bin_count;
+    return bin_id + bin_row_count < bin_count;
 }
 bool inline has_left_bin(int bin_id) {
     return bin_id % bin_row_count != 0;
