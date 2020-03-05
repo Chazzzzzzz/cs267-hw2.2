@@ -384,16 +384,6 @@ void simulate_one_step(particle_t* parts, int num_parts, double size, int rank, 
     if (has_down_proc(rank)) {
         send_buffers.push_back(send_particles(rank, 4, &requests));
     }
-    MPI_Status array_of_statuses[requests.size()];
-    for (auto request : requests) {
-        MPI_Status status;
-        MPI_Wait(request, &status);
-        delete request;
-    }
-    for (int i = 0; i < send_buffers.size(); i++) {
-        delete send_buffers[i];
-    }
-    //MPI_Barrier(MPI_COMM_WORLD);
     vector<particle_t*> recv_buffers;
     set<int> surrounding_bin_ids;
     if (has_up_proc(rank)) {
@@ -433,6 +423,15 @@ void simulate_one_step(particle_t* parts, int num_parts, double size, int rank, 
                 loop(part, bin_id - bin_row_count - 1);
             }
         }
+    }
+    MPI_Status array_of_statuses[requests.size()];
+    for (auto request : requests) {
+        MPI_Status status;
+        MPI_Wait(request, &status);
+        delete request;
+    }
+    for (int i = 0; i < send_buffers.size(); i++) {
+        delete send_buffers[i];
     }
 
     for (auto bin_id : local_binID) {
