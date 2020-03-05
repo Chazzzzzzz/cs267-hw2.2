@@ -23,8 +23,6 @@ int proc_count;
 int num_of_procs_with_more_rows;
 int rows_per_proc;
 
-int* gather_particles_size;
-int* gather_disp_size;
 
 
 int inline get_bin_id(particle_t& particle) {
@@ -62,6 +60,7 @@ void assign_bins(particle_t* parts, int num_parts, int rank) {
 void rebin(particle_t* original_parts, int num_parts, int rank, int num_procs) {
     vector<particle_t> particles_to_send;
     for (int binID: local_binID) {
+        /*
         for (particle_t* p: bins[binID]) {
             int new_binID = get_bin_id(*p);
             int new_procID = get_proc_id(new_binID);
@@ -71,6 +70,18 @@ void rebin(particle_t* original_parts, int num_parts, int rank, int num_procs) {
             } else if(new_binID != binID) {
                 bins[binID].erase(remove(bins[binID].begin(), bins[binID].end(), p), bins[binID].end());
                 bins[new_binID].push_back(p);
+            }
+        }
+        */
+        for (auto it = bins[binID].begin(); it != bins[binID].end(); it++) {
+            int new_binID = get_bin_id(**it);
+            int new_procID = get_proc_id(new_binID);
+            if (new_procID != rank) {
+                particles_to_send.push_back(**it);
+                bins[binID].erase(it--);
+            } else if(new_binID != binID) {
+                bins[new_binID].push_back(*it);
+                bins[binID].erase(it--);
             }
         }
     }
@@ -85,7 +96,6 @@ void rebin(particle_t* original_parts, int num_parts, int rank, int num_procs) {
         disp_size[i] = disp_size[i-1] + migrate_size[i-1];
     }
 
-    //particle_t* particles = (particle_t*) malloc(num_parts * sizeof(particle_t));
     particle_t* particles = new particle_t[num_parts];
     MPI_Allgatherv(&particles_to_send[0], particles_to_send.size(), PARTICLE, particles, migrate_size, disp_size, PARTICLE, MPI_COMM_WORLD);
     
@@ -396,8 +406,8 @@ void gather_for_save(particle_t* parts, int num_parts, double size, int rank, in
             local_particles.push_back(*p);
         }
     }
-    gather_particles_size = new int[num_procs];
-    gather_disp_size = new int[num_procs];
+    int* gather_particles_size = new int[num_procs];
+    int* gather_disp_size = new int[num_procs];
 
     int error_code = 0;
     
@@ -406,13 +416,13 @@ void gather_for_save(particle_t* parts, int num_parts, double size, int rank, in
     if (error_code != 0) {
         cout << "MPI_Gather error!!" << endl;
     }
-
     gather_disp_size[0] = 0;
     for (int i = 1; i < num_procs; i++) {
         gather_disp_size[i] = gather_disp_size[i-1] + gather_particles_size[i-1];
     }
 
-    particle_t recv_buf[num_parts];
+    //particle_t recv_buf[num_parts];
+    particle_t* recv_buf = new particle_t[num_parts];
     error_code = MPI_Gatherv(&local_particles[0], local_particles.size(), PARTICLE, recv_buf,
             gather_particles_size, gather_disp_size, PARTICLE, 0, MPI_COMM_WORLD);
 
@@ -431,4 +441,7 @@ void gather_for_save(particle_t* parts, int num_parts, double size, int rank, in
             parts[p.id-1].vy = p.vy;
         }
     }
+    delete[] recv_buf;
+    delete[] gather_particles_size;
+    delete[] gather_disp_size;
 }
