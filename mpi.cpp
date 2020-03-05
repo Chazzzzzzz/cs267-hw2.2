@@ -259,104 +259,38 @@ vector<int>* get_down_border_bin_ids(int rank) {
     return res;
 }
 
-/*
-
-7  0  1
- \ | /
-6-- --2
- / | \
-5  4  3
-
-*/
+// direction: 0 --> up; 1 --> down
 vector<particle_t>* send_particles(int rank, int direction, vector<MPI_Request*>* requests) {
     vector<particle_t>* to_send = new vector<particle_t>();
-    if (direction == 0 || direction == 4) {
-        vector<int>* border;
-        if (direction == 0) {
-            border = get_up_border_bin_ids(rank);
-        } else {
-            border = get_down_border_bin_ids(rank);
-        }
-        for (auto bin_id : *border) {
-            for (auto part : bins[bin_id]) {
-                to_send->push_back(*part);
-            }
-        }
-        delete border;
+    vector<int>* border;
+    if (direction == 0) {
+        border = get_up_border_bin_ids(rank);
     } else {
+        border = get_down_border_bin_ids(rank);
     }
+    for (auto bin_id : *border) {
+        for (auto part : bins[bin_id]) {
+            to_send->push_back(*part);
+        }
+    }
+    delete border;
     MPI_Request* request = new MPI_Request();
     requests->push_back(request);
-    switch (direction) {
-        case 0:
-            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, get_up_proc(rank), 0, MPI_COMM_WORLD, request);
-            break;
-        case 1:
-            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, get_up_proc(rank) + 1, 0, MPI_COMM_WORLD, request);
-            break;
-        case 2:
-            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, rank + 1, 0, MPI_COMM_WORLD, request);
-            break;
-        case 3:
-            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, get_down_proc(rank) + 1, 0, MPI_COMM_WORLD, request);
-            break;
-        case 4:
-            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, get_down_proc(rank), 0, MPI_COMM_WORLD, request);
-            break;
-        case 5:
-            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, get_down_proc(rank) - 1, 0, MPI_COMM_WORLD, request);
-            break;
-        case 6:
-            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, rank - 1, 0, MPI_COMM_WORLD, request);
-            break;
-        case 7:
-            MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, get_up_proc(rank) - 1, 0, MPI_COMM_WORLD, request);
-            break;
+    if (direction == 0) {
+        MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, get_up_proc(rank), 0, MPI_COMM_WORLD, request);
+    } else {
+        MPI_Isend(&(*to_send)[0], to_send->size(), PARTICLE, get_down_proc(rank), 0, MPI_COMM_WORLD, request);
     }
     return to_send;
 }
-/*
-
-7  0  1
- \ | /
-6-- --2
- / | \
-5  4  3
-
-*/
+// direction: 0 --> up; 1 --> down
 particle_t* receive_paritcles(int num_parts, int rank, int direction, set<int>* surrounding_bin_ids) {
     MPI_Status status;
-    particle_t* recv_buff;
-    if (direction == 0 || direction == 4) {
-        recv_buff = new particle_t[5 * bin_row_count];
+    particle_t* recv_buff = new particle_t[5 * bin_row_count];
+    if (direction == 0) {
+        MPI_Recv(recv_buff, num_parts, PARTICLE, get_up_proc(rank), 0, MPI_COMM_WORLD, &status);
     } else {
-        recv_buff = new particle_t[5];
-    }
-    switch (direction) {
-        case 0:
-            MPI_Recv(recv_buff, num_parts, PARTICLE, get_up_proc(rank), 0, MPI_COMM_WORLD, &status);
-            break;
-        case 1:
-            MPI_Recv(recv_buff, num_parts, PARTICLE, get_up_proc(rank) + 1, 0, MPI_COMM_WORLD, &status);
-            break;
-        case 2:
-            MPI_Recv(recv_buff, num_parts, PARTICLE, rank + 1, 0, MPI_COMM_WORLD, &status);
-            break;
-        case 3:
-            MPI_Recv(recv_buff, num_parts, PARTICLE, get_down_proc(rank) + 1, 0, MPI_COMM_WORLD, &status);
-            break;
-        case 4:
-            MPI_Recv(recv_buff, num_parts, PARTICLE, get_down_proc(rank), 0, MPI_COMM_WORLD, &status);
-            break;
-        case 5:
-            MPI_Recv(recv_buff, num_parts, PARTICLE, get_down_proc(rank) - 1, 0, MPI_COMM_WORLD, &status);
-            break;
-        case 6:
-            MPI_Recv(recv_buff, num_parts, PARTICLE, rank - 1, 0, MPI_COMM_WORLD, &status);
-            break;
-        case 7:
-            MPI_Recv(recv_buff, num_parts, PARTICLE, get_up_proc(rank) - 1, 0, MPI_COMM_WORLD, &status);
-            break;
+        MPI_Recv(recv_buff, num_parts, PARTICLE, get_down_proc(rank), 0, MPI_COMM_WORLD, &status);
     }
 
     int count;
