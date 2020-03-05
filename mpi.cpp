@@ -15,13 +15,13 @@ double size;
 int bin_row_count;
 int bin_count;
 double bin_size;
-int bins_per_proc;
 bin_t* bins;
 vector<int> local_binID;
 int* migrate_size;
 int* disp_size;
-int proc_row_count;
 int proc_count;
+int num_of_procs_with_more_rows;
+int rows_per_proc;
 
 int* gather_particles_size;
 int* gather_disp_size;
@@ -41,7 +41,12 @@ int inline get_bin_id(particle_t& particle) {
 }
 
 int inline get_proc_id(int bin_id) {
-    return bin_id / bins_per_proc;
+    int row_id = bin_id / bin_row_count;
+    if (row_id >= num_of_procs_with_more_rows * (rows_per_proc + 1)) {
+        return (row_id - num_of_procs_with_more_rows * (rows_per_proc + 1)) / rows_per_proc + num_of_procs_with_more_rows;
+    } else {
+        return row_id / (rows_per_proc + 1);
+    }
 }
 
 void assign_bins(particle_t* parts, int num_parts, int rank) {
@@ -114,12 +119,25 @@ int max_partitions(int process_count) {
 }
 
 void get_local_binID(int rank) {
-    for (int i = 0; i < bins_per_proc; i++) {
-        local_binID.push_back(rank * bins_per_proc + i);
+    if (rank < num_of_procs_with_more_rows) {
+        for (int i = 0; i < rows_per_proc + 1; i++) {
+            int row = rank * (rows_per_proc + 1) + i;
+            for (int j = 0; j < bin_row_count; j++) {
+                local_binID.push_back(row * bin_row_count + j);
+            }
+        }
+    } else {
+        for (int i = 0; i < rows_per_proc; i++) {
+            int row = num_of_procs_with_more_rows * (rows_per_proc + 1) + (rank - num_of_procs_with_more_rows) * rows_per_proc + i;
+            for (int j = 0; j < bin_row_count; j++) {
+                local_binID.push_back(row * bin_row_count + j);
+            }
+        }
     }
 }
 
 void init_simulation(particle_t* parts, int num_parts, double size_, int rank, int num_procs) {
+
 	// You can use this space to initialize data objects that you may need
 	// This function will be called once before the algorithm begins
 	// Do not do any particle simulation here
@@ -128,14 +146,10 @@ void init_simulation(particle_t* parts, int num_parts, double size_, int rank, i
     bin_count = bin_row_count * bin_row_count;
     bin_size = size / bin_row_count;
     bins = new bin_t[bin_row_count * bin_row_count];
-    // get bins_per_proc
-    proc_count = max_partitions(num_procs);
-    bins_per_proc = bin_count / proc_count;
-    if (bin_row_count > bins_per_proc) {
-        proc_row_count = bin_row_count / bins_per_proc;
-    } else {
-        proc_row_count = 1;
-    }
+    proc_count = min(num_procs, bin_row_count);
+    rows_per_proc = bin_row_count / proc_count;
+    num_of_procs_with_more_rows = bin_row_count % proc_count;
+
     // assign bins
     if (rank < proc_count) {
         get_local_binID(rank);
@@ -203,78 +217,46 @@ bool inline has_up_proc(int proc_id) {
     if (proc_id >= proc_count) {
         return false;
     }
-    return proc_id - proc_row_count > -1;
+    return proc_id > 0;
 }
 int inline get_up_proc(int proc_id) {
-    return proc_id - proc_row_count;
-}
-bool inline has_down_proc(int proc_id) {
-    if (proc_id >= proc_count) {
-        return false;
-    }
-    return proc_id + proc_row_count < proc_count;
-}
-int inline get_down_proc(int proc_id) {
-    return proc_id + proc_row_count;
-}
-bool inline has_left_proc(int proc_id) {
-    if (proc_id >= proc_count) {
-        return false;
-    }
-    return proc_id % proc_row_count != 0;
-}
-int inline get_left_proc(int proc_id) {
     return proc_id - 1;
 }
-bool inline has_right_proc(int proc_id) {
-    if (proc_id >= proc_count) {
-        return false;
-    }
-    return proc_id % proc_row_count != proc_row_count - 1;
+bool inline has_down_proc(int proc_id) {
+    return proc_id < proc_count - 1;
 }
-int inline get_right_proc(int proc_id) {
+int inline get_down_proc(int proc_id) {
     return proc_id + 1;
 }
 
-vector<int>* get_up_border_bin_ids(int proc_id) {
+vector<int>* get_up_border_bin_ids(int rank) {
     vector<int>* res = new vector<int>;
-    if (bin_row_count > bins_per_proc) {
-        for (int i = 0; i < bins_per_proc; i++) {
-            res->push_back(proc_id * bins_per_proc + i);
-        }
+    int row;
+    if (rank < num_of_procs_with_more_rows) {
+        row = rank * (rows_per_proc + 1);
     } else {
-        for (int i = 0; i < bin_row_count; i++) {
-            res->push_back(proc_id * bins_per_proc + i);
-        }
+        row = num_of_procs_with_more_rows * (rows_per_proc + 1) + (rank - num_of_procs_with_more_rows) * rows_per_proc;
     }
+    for (int i = 0; i < bin_row_count; i++) {
+        res->push_back(row * bin_row_count + i);
+    }
+
     return res;
 }
-vector<int>* get_down_border_bin_ids(int proc_id) {
+vector<int>* get_down_border_bin_ids(int rank) {
     vector<int>* res = new vector<int>();
-    if (bin_row_count > bins_per_proc) {
-        for (int i = 0; i < bins_per_proc; i++) {
-            res->push_back(proc_id * bins_per_proc + i);
-        }
+    int row;
+    if (rank < num_of_procs_with_more_rows) {
+        row = rank * (rows_per_proc + 1);
+        row += rows_per_proc;
     } else {
-        for (int i = 0; i < bin_row_count; i++) {
-            res->push_back((proc_id + 1) * bins_per_proc - i - 1);
-        }
+        row = num_of_procs_with_more_rows * (rows_per_proc + 1) + (rank - num_of_procs_with_more_rows) * rows_per_proc;
+        row += rows_per_proc - 1;
+    }
+    for (int i = 0; i < bin_row_count; i++) {
+        res->push_back(row * bin_row_count + i);
     }
     return res;
-}
-int get_left_border_bin_id(int proc_id) {
-    if (bin_row_count > bins_per_proc) {
-        return proc_id * bins_per_proc;
-    } else {
-        return -1;
-    }
-}
-int get_right_border_bin_id(int proc_id) {
-    if (bin_row_count > bins_per_proc) {
-        return (proc_id + 1) * bins_per_proc - 1;
-    } else {
-        return -1;
-    }
 }
 
 /*
@@ -302,18 +284,6 @@ vector<particle_t>* send_particles(int rank, int direction, vector<MPI_Request*>
         }
         delete border;
     } else {
-        int border;
-        switch (direction) {
-            case 1: case 2: case 3:
-                border = get_right_border_bin_id(rank);
-                break;
-            case 5: case 6: case 7:
-                border = get_left_border_bin_id(rank);
-                break;
-        }
-        for (auto part : bins[border]) {
-            to_send->push_back(*part);
-        }
     }
     MPI_Request* request = new MPI_Request();
     requests->push_back(request);
@@ -358,7 +328,7 @@ particle_t* receive_paritcles(int num_parts, int rank, int direction, set<int>* 
     MPI_Status status;
     particle_t* recv_buff;
     if (direction == 0 || direction == 4) {
-        recv_buff = new particle_t[5 * bin_row_count / proc_row_count];
+        recv_buff = new particle_t[5 * bin_row_count];
     } else {
         recv_buff = new particle_t[5];
     }
@@ -411,26 +381,8 @@ void simulate_one_step(particle_t* parts, int num_parts, double size, int rank, 
     if (has_up_proc(rank)) {
         send_buffers.push_back(send_particles(rank, 0, &requests));
     }
-    if (has_left_proc(rank)) {
-        send_buffers.push_back(send_particles(rank, 6, &requests));
-    }
     if (has_down_proc(rank)) {
         send_buffers.push_back(send_particles(rank, 4, &requests));
-    }
-    if (has_right_proc(rank)) {
-        send_buffers.push_back(send_particles(rank, 2, &requests));
-    }
-    if (has_up_proc(rank) && has_left_proc(rank)) {
-        send_buffers.push_back(send_particles(rank, 7, &requests));
-    }
-    if (has_up_proc(rank) && has_right_proc(rank)) {
-        send_buffers.push_back(send_particles(rank, 1, &requests));
-    }
-    if (has_down_proc(rank) && has_left_proc(rank)) {
-        send_buffers.push_back(send_particles(rank, 5, &requests));
-    }
-    if (has_down_proc(rank) && has_right_proc(rank)) {
-        send_buffers.push_back(send_particles(rank, 3, &requests));
     }
     MPI_Status array_of_statuses[requests.size()];
     for (auto request : requests) {
@@ -449,24 +401,6 @@ void simulate_one_step(particle_t* parts, int num_parts, double size, int rank, 
     }
     if (has_down_proc(rank)) {
         recv_buffers.push_back(receive_paritcles(num_parts, rank, 4, &surrounding_bin_ids));
-    }
-    if (has_left_proc(rank)) {
-        recv_buffers.push_back(receive_paritcles(num_parts, rank, 6, &surrounding_bin_ids));
-    }
-    if (has_right_proc(rank)) {
-        recv_buffers.push_back(receive_paritcles(num_parts, rank, 2, &surrounding_bin_ids));
-    }
-    if (has_up_proc(rank) && has_right_proc(rank)) {
-        recv_buffers.push_back(receive_paritcles(num_parts, rank, 1, &surrounding_bin_ids));
-    }
-    if (has_up_proc(rank) && has_left_proc(rank)) {
-        recv_buffers.push_back(receive_paritcles(num_parts, rank, 7, &surrounding_bin_ids));
-    }
-    if (has_down_proc(rank) && has_left_proc(rank)) {
-        recv_buffers.push_back(receive_paritcles(num_parts, rank, 5, &surrounding_bin_ids));
-    }
-    if (has_down_proc(rank) && has_right_proc(rank)) {
-        recv_buffers.push_back(receive_paritcles(num_parts, rank, 3, &surrounding_bin_ids));
     }
 
     // calculate force here
